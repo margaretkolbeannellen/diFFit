@@ -2,7 +2,7 @@
 """
 Created on Sat Jul 25 12:54:30 2020
 
-@author: starlord
+@author: Quinten Giglio
 """
 import fabio
 import pyFAI
@@ -15,31 +15,25 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 
+import dash
+import dash_bootstrap_components as dbc
+import dash_html_components as html
+import dash_core_components as dcc
+from dash.dependencies import Input, Output, State
+
 class element:
     def __init__(self, file_name):
         self.file_name = file_name
-        name = os.path.basename(file_name)
-        self.name = os.path.splitext(name)[0]
-        self.img = fabio.open(file_name)
+        self.name = os.path.splitext(os.path.basename(file_name))[0]
+        # self.img = fabio.open(file_name)
         self.data = fabio.open(file_name).data
-        self.hkls = [
-            [1, 1, 1],
-            [2, 0, 0],
-            [2, 2, 0],
-            [3, 1, 1],
-            [2, 2, 2],
-            [4, 0, 0],
-            [3, 3, 1],
-            [4, 2, 0],
-            [4, 2, 2],
-            [3, 3, 3],
-        ]
-
+    
     def filt(self, zmax):
         self.data_filt = self.data
         self.data_filt[self.data > zmax] = 0
-
-    def gen_figs(self, Filter=False, zmax=400):
+        
+        
+    def gen_figs(self, tth0, Filter=False, zmax=400):
         img_fig = px.imshow(self.data, origin='lower', range_color=[0, zmax])
         img_fig.layout.coloraxis.showscale = False
         img_fig.update_layout(title=self.name)
@@ -47,19 +41,19 @@ class element:
 
         hist_fig = go.Figure(
             go.Scatter(
-                x=self.res[0],
-                y=self.res[1],
+                x=self.hist['x'],
+                y=self.hist['y'],
                 mode='markers',
             ))
 
-        for i in self.tth:
+        for i in tth0:
             hist_fig.add_shape(
                 # Line Vertical
                 dict(type="line",
                      x0=i,
                      y0=0,
                      x1=i,
-                     y1=self.res[1].max(),
+                     y1=self.hist['y'].max(),
                      line=dict(
                          color="MediumPurple",
                          width=2,
@@ -67,7 +61,7 @@ class element:
                      )))
         for i, model in enumerate(self.ycomps):
             hist_fig.add_trace(
-                go.Scatter(x=self.spec['x'], y=model, mode="lines"))
+                go.Scatter(x=self.hist['x'], y=model, mode="lines"))
 
         hist_fig.update_layout(
             title=self.name,
@@ -75,82 +69,70 @@ class element:
             yaxis_title="Counts",
         )
 
-        hist_fig.update_yaxes(range=[0, self.res[1].max()+10])
+        hist_fig.update_yaxes(range=[0, self.hist['y'].max()+10])
         self.hist_fig = hist_fig
 
         hist_fig_2D = go.Figure(data=go.Heatmap(
-            z=self.res2[0],
-            x=self.res2[1],
-            y=self.res2[2],
+            z=self.polar['I'],
+            x=self.polar['tth'],
+            y=self.polar['chi'],
             zmax=zmax,
             zmin=0,
+            name='Data',
+            hovertemplate=
+            'two theta %{x}'+
+            'chi %{y}',
         ))
+        for i, strain in enumerate(self.fit_values['strain']):
+            short =  np.round(strain, decimals=3)
+            d = np.round(self.fit_values['d'][i], decimals=5)
+            hist_fig_2D.add_trace(
+                # Line Vertical
+                go.Scatter(
+                    x=[self.fit_values.center[i], self.fit_values.center[i]],
+                    y=[self.polar['chi'].min(),self.polar['chi'].max()],
+                    mode='lines',
+                    name='Peak',
+                    text = f'<br>d spacing: {d}'+f'<br>Strain: {short}',
+                    opacity=0.4,
+                    marker=dict(color='white'),
+                    hoverinfo = 'name+text'
+                    ))
+             
         hist_fig_2D.update_layout(
             title=self.name,
             xaxis_nticks=36,
             xaxis_title="Two Theta",
             yaxis_title="Chi",
+            hovermode='x',
+            showlegend=False,
+            coloraxis_showscale=False,
         )
         self.hist_fig_2D = hist_fig_2D
 
-        r, theta = np.meshgrid(self.res2[1], self.res2[2])
+        r, theta = np.meshgrid(self.polar['tth'], self.polar['chi'])
         r = r.ravel()
         theta = theta.ravel()
-        size = np.ones_like(r)
-
         polar_fig = go.Figure(
             go.Scatterpolargl(
                 r=r,
                 theta=theta,
+                fill='toself',
                 mode='markers',
                 marker=dict(
-                    color=self.res2[0].ravel(),
+                    color=self.polar['I'].ravel(),
                     size=4,
                     cmin=0,
                     cmax=zmax,
                     #colorbar=dict(title="Intensity"),
                     # colorscale="Viridis"
-                )))
+                )
+                ))
         polar_fig.update_layout(width=800, height=800, title=self.name)
         polar_fig.layout.coloraxis.showscale = False
         self.polar_fig = polar_fig
         
         
-        
-def process(data, poni):
-    """
-    Find angles from 2D x-ray diffraction data.
-
-    Parameters
-    ----------
-    tiff : 2D array
-        2 dimensional array of diffraction data
-    poni : .poni file
-        The name of file path of the callibration file.
-        This can be generated using the pyFAI GUI.
-        To launch run pyFAI-calib2 in the terminal.
-
-    Returns
-    -------
-    res : list-like
-        Two theta diffraction data. [two-theta, intensity]
-    res2 : list-like
-        2D diffraction data. [I, two-theta, chi]
-
-    """
-    # create an instance of the pyFAi azimuthal Integrator
-    # this object can also be manually defined
-    ai = pyFAI.load(poni)
-    # result in just the 2 theta space
-    # array, number of bins, unit
-    res = ai.integrate1d(data, 1000, unit='2th_deg')
-    # result in both angles
-    # array, 2theta bins, chi bins, unit
-    res2 = ai.integrate2d(data, 500, 360, unit='2th_deg')
-
-    return res, res2
-
-
 
 def d_from_hkl(hkls, a):
     d = [None]*10
@@ -166,6 +148,44 @@ def tth_from_d(d,lamb):
         tth[i] = np.arcsin((1*lamb)/(2*d[i]))
     tth = np.round(2*np.degrees(tth),decimals=2)    
     return tth
+
+def integrateHistAndPolar(data, poni):
+    
+    # create an instance of the pyFAi azimuthal Integrator
+    # this object can also be manually defined
+    ai = pyFAI.load(poni)
+    # result in just the 2 theta space
+    # array, number of bins, unit
+    res = ai.integrate1d(data, 1000, unit='2th_deg')
+    res_dict ={
+        'x' : res[0],
+        'y' : res[1],
+        }
+    hist = pd.DataFrame.from_dict(res_dict)
+    
+    
+    # result in both angles
+    # array, 2theta bins, chi bins, unit
+    res2 = ai.integrate2d(data, 500, 360, unit='2th_deg')
+    r, theta = np.meshgrid(res2[1], res2[2])
+    r = r.ravel()
+    theta = theta.ravel()
+    I = res2[0]
+    x = r*np.cos(theta)
+    y = r*np.sin(theta)
+    z = I.ravel()
+    res2_dict = {
+        'I' : I,
+        'tth' : res2[1],
+        'chi' : res2[2],
+        'x' : x,
+        'y' : y,
+        'z' : z,
+        }
+    
+    
+    
+    return res_dict, res2_dict
 
 
 def create_spectrum(tth, x, y):
@@ -270,7 +290,9 @@ def generate_model(spec):
     return composite_model, params
 
 
-def get_output(model, params, x, y, spec):
+def get_output(model, params, spec):
+    x = spec['x']
+    y = spec['y']
     output = model.fit(y, params, x=x)
     components = output.eval_components(x=x)
     # find y vals with components[f'm{i}_']
@@ -278,10 +300,6 @@ def get_output(model, params, x, y, spec):
     for i, model in enumerate(spec['model']):
         ycomps[i] = components[f'm{i}_']
     best_values = output.best_values
-    return ycomps, best_values
-
-
-def get_vals_df(spec, best_values):
     model_params = {
         'GaussianModel': ['amplitude', 'sigma'],
         'LorentzianModel': ['amplitude', 'sigma'],
@@ -306,7 +324,21 @@ def get_vals_df(spec, best_values):
         values['center'].append(best_values[prefix + 'center'])
         values['order'].append(index)
         values['model'].append(model['type'])
-    df = pd.DataFrame.from_dict(values)
-    df.set_index('order', inplace=True)
-    return df        
-        
+    values_df = pd.DataFrame.from_dict(values)
+    values_df.set_index('order', inplace=True)
+    
+    return ycomps, values_df
+
+
+def fit_hist(tth0, x, y):
+    spec = create_spectrum(tth0, x, y)
+    peak_indices = update_spec_from_peaks(spec)
+    model, params = generate_model(spec)
+    ycomps, fit_vals_df = get_output(model, params, spec)
+    return ycomps, fit_vals_df
+
+
+
+
+
+
