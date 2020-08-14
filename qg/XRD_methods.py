@@ -14,7 +14,7 @@ import os
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
-
+import plotly
 import dash
 import dash_bootstrap_components as dbc
 import dash_html_components as html
@@ -67,6 +67,7 @@ class element:
             title=self.name,
             xaxis_title="Two Theta",
             yaxis_title="Counts",
+            template='plotly_white'
         )
 
         hist_fig.update_yaxes(range=[0, self.hist['y'].max()+10])
@@ -76,15 +77,17 @@ class element:
             z=self.polar['I'],
             x=self.polar['tth'],
             y=self.polar['chi'],
+            showscale=False,
+            colorscale="Plasma",
             zmax=zmax,
             zmin=0,
             name='Data',
             hovertemplate=
             'two theta %{x}'+
-            'chi %{y}',
+            '<br>chi %{y}',
         ))
         for i, strain in enumerate(self.fit_values['strain']):
-            short =  np.round(strain, decimals=3)
+            short =  np.round(strain, decimals=5)
             d = np.round(self.fit_values['d'][i], decimals=5)
             hist_fig_2D.add_trace(
                 # Line Vertical
@@ -94,9 +97,9 @@ class element:
                     mode='lines',
                     name='Peak',
                     text = f'<br>d spacing: {d}'+f'<br>Strain: {short}',
-                    opacity=0.4,
+                    opacity=0.5,
                     marker=dict(color='white'),
-                    hoverinfo = 'name+text'
+                    hoverinfo = 'name+text',
                     ))
              
         hist_fig_2D.update_layout(
@@ -106,7 +109,8 @@ class element:
             yaxis_title="Chi",
             hovermode='x',
             showlegend=False,
-            coloraxis_showscale=False,
+            height = 800,
+            template='simple_white',
         )
         self.hist_fig_2D = hist_fig_2D
 
@@ -189,6 +193,29 @@ def integrateHistAndPolar(data, poni):
 
 
 def create_spectrum(tth, x, y):
+    """
+    Create a prediction of what the spectrum should look like.
+    The number of peaks/gaussian functions put into the dict
+    comes directly from the length of the predicted tth input
+    so if you dont have a peak where you want one to be,
+    make sure there are enough tth
+    
+    
+    Parameters
+    ----------
+    tth : TYPE
+        DESCRIPTION.
+    x : TYPE
+        DESCRIPTION.
+    y : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    spec : TYPE
+        DESCRIPTION.
+
+    """
     spec = {
         'x': x,
         'y': y,
