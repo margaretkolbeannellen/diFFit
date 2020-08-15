@@ -20,6 +20,8 @@ import dash_bootstrap_components as dbc
 import dash_html_components as html
 import dash_core_components as dcc
 from dash.dependencies import Input, Output, State
+from background_larch import XrayBackground
+
 
 class element:
     def __init__(self, file_name):
@@ -31,6 +33,12 @@ class element:
     def filt(self, zmax):
         self.data_filt = self.data
         self.data_filt[self.data > zmax] = 0
+        
+    def find_background(self, width):
+        data = [int(self.hist['y'][i]) for i in range(len(self.hist['y']))]
+        self.bgr = XrayBackground(data=data, width=width).bgr
+        
+        
         
         
     def gen_figs(self, tth0, Filter=False, zmax=400):
@@ -152,6 +160,15 @@ def tth_from_d(d,lamb):
         tth[i] = np.arcsin((1*lamb)/(2*d[i]))
     tth = np.round(2*np.degrees(tth),decimals=2)    
     return tth
+
+
+def d_from_tth(tth,lamb):
+    theta = np.deg2rad(tth/2)
+    d = np.empty_like(tth)
+    for i, theta in enumerate(theta):        
+        d[i] = (lamb)/(2*np.sin(theta)) 
+    return d
+
 
 def integrateHistAndPolar(data, poni):
     
