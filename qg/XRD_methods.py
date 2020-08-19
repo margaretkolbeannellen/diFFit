@@ -52,6 +52,7 @@ class element:
                 x=self.hist['x'],
                 y=self.hist['y'],
                 mode='markers',
+                name = 'Data'
             ))
 
         for i in tth0:
@@ -68,12 +69,13 @@ class element:
                          dash="dot",
                      )))
         for i, model in enumerate(self.ycomps):
+            center = np.round(self.fit_values['center'][i], decimals=2)
             hist_fig.add_trace(
-                go.Scatter(x=self.hist['x'], y=model, mode="lines"))
+                go.Scatter(x=self.hist['x'], y=model, mode="lines", name=f'Peak: {center}'))
 
         hist_fig.update_layout(
             title=self.name,
-            xaxis_title="Two Theta",
+            xaxis_title="Two Theta (degrees)",
             yaxis_title="Counts",
             template='plotly_white'
         )
@@ -104,20 +106,22 @@ class element:
                     y=[self.polar['chi'].min(),self.polar['chi'].max()],
                     mode='lines',
                     name='Peak',
-                    text = f'<br>d spacing: {d}'+f'<br>Strain: {short}',
+                    text = f'Fitted Values: <br>d spacing: {d}'+f'<br>strain: {short}',
                     opacity=0.5,
                     marker=dict(color='white'),
-                    hoverinfo = 'name+text',
+                    hoverinfo = 'text',
+                    line = dict(dash='dash')
                     ))
              
         hist_fig_2D.update_layout(
             title=self.name,
             xaxis_nticks=36,
-            xaxis_title="Two Theta",
-            yaxis_title="Chi",
+            xaxis_title="Two Theta (degrees)",
+            yaxis_title="Chi (degrees)",
             hovermode='x',
             showlegend=False,
-            height = 800,
+            autosize=True,
+            height = 650,
             template='simple_white',
         )
         self.hist_fig_2D = hist_fig_2D
@@ -177,7 +181,7 @@ def integrateHistAndPolar(data, poni):
     ai = pyFAI.load(poni)
     # result in just the 2 theta space
     # array, number of bins, unit
-    res = ai.integrate1d(data, 1000, unit='2th_deg')
+    res = ai.integrate1d(data, 2000, unit='2th_deg')
     res_dict ={
         'x' : res[0],
         'y' : res[1],
@@ -187,7 +191,7 @@ def integrateHistAndPolar(data, poni):
     
     # result in both angles
     # array, 2theta bins, chi bins, unit
-    res2 = ai.integrate2d(data, 500, 360, unit='2th_deg')
+    res2 = ai.integrate2d(data, 1000, 3600, unit='2th_deg')
     r, theta = np.meshgrid(res2[1], res2[2])
     r = r.ravel()
     theta = theta.ravel()
@@ -353,7 +357,7 @@ def get_output(model, params, spec):
         'order': [],
         'amplitude': [],
         'center': [],
-        'sigma': [],
+        'sigma (width)': [],
         'model': []
     }
 
@@ -364,7 +368,7 @@ def get_output(model, params, spec):
             if param == 'amplitude':
                 values['amplitude'].append(best_values[prefix + param])
             elif param == 'sigma':
-                values['sigma'].append(best_values[prefix + param])
+                values['sigma (width)'].append(best_values[prefix + param])
         values['center'].append(best_values[prefix + 'center'])
         values['order'].append(index)
         values['model'].append(model['type'])
