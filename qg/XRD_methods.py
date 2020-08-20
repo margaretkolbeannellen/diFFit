@@ -358,7 +358,8 @@ def get_output(model, params, spec):
         'amplitude': [],
         'center': [],
         'sigma (width)': [],
-        'model': []
+        'FWHM' :[],
+        'model': [],
     }
 
     for i, model in enumerate(spec['model']):
@@ -369,6 +370,8 @@ def get_output(model, params, spec):
                 values['amplitude'].append(best_values[prefix + param])
             elif param == 'sigma':
                 values['sigma (width)'].append(best_values[prefix + param])
+                fwhm = 2*best_values[prefix + param]*np.sqrt(2*np.log(2))
+                values['FWHM'].append(fwhm)
         values['center'].append(best_values[prefix + 'center'])
         values['order'].append(index)
         values['model'].append(model['type'])
@@ -387,6 +390,41 @@ def fit_hist(tth0, x, y):
 
 
 
+def show_one(element):
 
+    return dbc.Container([
+        dbc.Row([
+            dbc.Col([dcc.Graph(figure=element.hist_fig_2D, )],
+                    width={
+                        "size": 7,
+                    }),
+            dbc.Col([
+                html.Div([dcc.Graph(figure=element.hist_fig)]),
+                html.Div(
+                    [
+                        dbc.Table.from_dataframe(
+                            element.fit_values.round(4).drop(
+                                ["model", "amplitude"], axis=1),
+                            striped=False,
+                            bordered=False,
+                            className="table table-hover",
+                            size='sm',
+                            responsive=True),
+                    ],
+                    className="table-wrapper-scroll-y my-custom-scrollbar",
+                    style={
+                        'marginBottom': 20,
+                        'marginTop': 10,
+                    },
+                ),
+            ],
+                    width={'size': 5}),
+        ]),
+    ],
+                         fluid="True",
+                         style={
+                             "margin": "20px",
+                             "border": "2px solid black",
+                         })
 
 
